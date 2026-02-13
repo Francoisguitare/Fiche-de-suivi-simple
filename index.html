@@ -4,27 +4,337 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Suivi GIA - Espace Élève</title>
-    <!-- Tailwind CSS -->
+    <!-- Tailwind CSS pour le style rapide et propre -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <!-- Bibliothèque d'icônes légère -->
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
+        /* Police lisible */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
         body { font-family: 'Inter', sans-serif; }
+        
+        /* Animations douces */
         .fade-in { animation: fadeIn 0.3s ease-in; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Pastille discrète prof */
+        #teacher-dot {
+            transition: all 0.3s ease;
+            opacity: 0.3;
+        }
+        #teacher-dot:hover {
+            opacity: 1;
+            transform: scale(1.5);
+        }
+
+        /* Classe utilitaire pour forcer le curseur main si besoin */
+        .force-pointer { cursor: pointer !important; }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react": "https://esm.sh/react@^19.2.4",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.564.0"
-  }
-}
-</script>
 </head>
-<body class="bg-slate-100 min-h-screen text-slate-800">
-    <div id="root" class="min-h-screen flex justify-center py-4 sm:py-8"></div>
+<body class="bg-slate-100 min-h-screen flex justify-center py-4 sm:py-8 text-slate-800">
+
+    <!-- Container principal (La feuille A4) -->
+    <div id="app-container" class="w-full max-w-3xl bg-white shadow-2xl rounded-sm min-h-[85vh] flex flex-col relative overflow-hidden">
+        
+        <!-- Reliure visuelle -->
+        <div class="absolute top-0 left-0 w-full h-2 bg-blue-600 z-20"></div>
+
+        <!-- Pastille Professeur (Cachée en haut à droite) -->
+        <div id="teacher-dot" class="absolute top-4 right-4 w-3 h-3 bg-blue-400 rounded-full cursor-pointer z-50" title="Espace Professeur"></div>
+
+        <!-- Le contenu sera injecté ici par le JavaScript -->
+        <div id="content" class="flex-1 flex flex-col"></div>
+
+    </div>
+
+    <script>
+        // --- DONNÉES ---
+        const lessons = [
+            {
+                id: 1,
+                title: "Module 1 : Tenue et Position",
+                duration: "12 min",
+                desc: "Apprendre à tenir la guitare sans tension. Position de la main gauche.",
+                videoId: "dQw4w9WgXcQ"
+            },
+            {
+                id: 2,
+                title: "Module 2 : Les 3 premiers accords",
+                duration: "25 min",
+                desc: "Maitriser le Mi mineur, le La majeur et le Ré majeur.",
+                videoId: "dQw4w9WgXcQ"
+            },
+            {
+                id: 3,
+                title: "Module 3 : Rythmique Feu de Camp",
+                duration: "18 min",
+                desc: "Le mouvement de balancier et le rythme bas-bas-haut.",
+                videoId: "dQw4w9WgXcQ"
+            },
+            {
+                id: 4,
+                title: "Module 4 : L'Arpège simple",
+                duration: "20 min",
+                desc: "Délier les doigts de la main droite. Pouce, index, majeur.",
+                videoId: "dQw4w9WgXcQ"
+            },
+            {
+                id: 5,
+                title: "Module 5 : Improvisation Pentatonique",
+                duration: "30 min",
+                desc: "Premiers pas dans l'improvisation sur une gamme simple.",
+                videoId: "dQw4w9WgXcQ"
+            }
+        ];
+
+        // --- ÉTAT (STATE) ---
+        let state = {
+            completedLessons: 0, // 0 = aucune finie
+            view: 'list',        // 'list' ou 'detail'
+            selectedLessonId: null,
+            isTeacherMode: false
+        };
+
+        // --- FONCTIONS DE RENDU ---
+
+        function render() {
+            const container = document.getElementById('content');
+            container.innerHTML = ''; // Nettoyer
+
+            if (state.view === 'list') {
+                renderListView(container);
+            } else {
+                renderDetailView(container);
+            }
+            
+            // Réinitialiser les icônes après chaque rendu
+            if (window.lucide) {
+                lucide.createIcons();
+            }
+        }
+
+        function renderListView(container) {
+            // Header de la liste
+            const header = document.createElement('div');
+            header.className = "p-8 sm:p-10 border-b-2 border-slate-100";
+            const progressPct = (state.completedLessons / lessons.length) * 100;
+            
+            header.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h1 class="text-3xl sm:text-4xl font-extrabold text-slate-800 tracking-tight mb-2">Suivi de Progression</h1>
+                        <p class="text-xl text-slate-500">Guitare Impro Académie — Élève</p>
+                    </div>
+                </div>
+                <div class="mt-6 w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                    <div class="h-full bg-blue-600 transition-all duration-1000" style="width: ${progressPct}%"></div>
+                </div>
+            `;
+            container.appendChild(header);
+
+            // Liste des leçons
+            const list = document.createElement('div');
+            list.className = "flex-1 pb-10"; // Padding bottom pour respirer
+
+            lessons.forEach((lesson, index) => {
+                const status = getStatus(index);
+                const item = document.createElement('div');
+                
+                // --- LOGIQUE DES CLASSES CSS ---
+                let bgClass = "";
+                
+                if (status === 'locked') {
+                    // VERROUILLÉ : Gris, pas de curseur main, pas d'effet
+                    bgClass = 'bg-slate-50 opacity-60 cursor-not-allowed grayscale border-b border-slate-100';
+                } else {
+                    // ACCESSIBLE (En cours ou Fini) : Curseur main, Effet levier au survol
+                    bgClass = 'bg-white cursor-pointer border-b border-slate-100 transition-all duration-200 transform hover:-translate-y-1 hover:shadow-lg hover:z-10 relative';
+                    
+                    if (status === 'current') {
+                        // EN COURS : Bordure bleue, fond blanc pur
+                        bgClass += ' ring-2 ring-blue-500 ring-offset-2 shadow-md z-10 my-1 rounded-sm'; 
+                    } else {
+                        // FINI : Fond légèrement vert au survol
+                        bgClass += ' hover:bg-green-50';
+                    }
+                }
+
+                // Icônes
+                let iconHtml = '';
+                if (status === 'completed') iconHtml = `<div class="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-green-600"><i data-lucide="check-circle" class="w-7 h-7"></i></div>`;
+                else if (status === 'current') iconHtml = `<div class="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center text-white shadow-lg animate-pulse"><i data-lucide="play" class="w-6 h-6 ml-1 fill-white"></i></div>`;
+                else iconHtml = `<div class="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-slate-400"><i data-lucide="lock" class="w-6 h-6"></i></div>`;
+
+                // Badges texte
+                let statusText = '';
+                if (status === 'current') statusText = `<span class="ml-4 text-blue-600 font-bold bg-blue-100 px-2 py-0.5 rounded text-sm uppercase tracking-wide">C'est ici !</span>`;
+                if (status === 'completed') statusText = `<span class="ml-4 text-green-600 font-bold text-sm uppercase tracking-wide">Validé</span>`;
+
+                // Boutons PROF
+                let teacherControls = '';
+                if (state.isTeacherMode) {
+                    if (status === 'current') {
+                        teacherControls = `<button onclick="window.validateLesson(${index})" class="absolute right-2 top-2 bg-green-100 text-green-700 px-3 py-1 rounded text-xs font-bold border border-green-200 z-20 hover:bg-green-200 cursor-pointer">VALIDER</button>`;
+                    } else if (status === 'completed' && index === state.completedLessons - 1) {
+                         teacherControls = `<button onclick="window.unvalidateLesson()" class="absolute right-2 top-2 bg-red-50 text-red-400 px-2 py-1 rounded text-xs border border-red-100 z-20 hover:bg-red-100 cursor-pointer">ANNULER</button>`;
+                    }
+                }
+
+                item.className = `p-6 sm:p-8 flex items-center ${bgClass}`;
+                
+                // Contenu HTML de la ligne
+                item.innerHTML = `
+                    ${teacherControls}
+                    <div class="mr-6 sm:mr-8 flex-shrink-0">${iconHtml}</div>
+                    <div class="flex-1">
+                        <h3 class="text-xl sm:text-2xl font-bold mb-1 ${status === 'locked' ? 'text-slate-400' : 'text-slate-800'}">${lesson.title}</h3>
+                        <div class="flex items-center text-slate-500">
+                            <i data-lucide="video" class="w-4 h-4 mr-2"></i>
+                            <span class="text-base">${lesson.duration}</span>
+                            ${statusText}
+                        </div>
+                    </div>
+                    <div class="ml-4 text-slate-300">
+                        ${status !== 'locked' 
+                            ? '<div class="bg-blue-50 p-2 rounded-full text-blue-500"><i data-lucide="chevron-right" class="w-6 h-6"></i></div>' 
+                            : ''}
+                    </div>
+                `;
+
+                // Click event
+                item.onclick = (e) => {
+                    // Si on clique sur un bouton prof, on ne déclenche pas l'ouverture
+                    if(e.target.tagName === 'BUTTON') return;
+                    
+                    if (status !== 'locked' || state.isTeacherMode) {
+                        openLesson(lesson.id);
+                    }
+                };
+
+                list.appendChild(item);
+            });
+            
+            container.appendChild(list);
+
+            // Footer
+            const footer = document.createElement('div');
+            footer.className = "p-6 bg-slate-50 text-center border-t border-slate-200 mt-auto";
+            footer.innerHTML = `<p class="text-slate-400 italic">Besoin d'aide ? Appelle François directement.</p>`;
+            container.appendChild(footer);
+        }
+
+        function renderDetailView(container) {
+            const lesson = lessons.find(l => l.id === state.selectedLessonId);
+            if (!lesson) return;
+
+            const detail = document.createElement('div');
+            detail.className = "flex-1 flex flex-col fade-in bg-white";
+            
+            // Header Navigation
+            detail.innerHTML = `
+                <div class="p-6 border-b border-gray-100 flex items-center sticky top-0 bg-white z-10">
+                    <button onclick="window.closeLesson()" class="flex items-center text-slate-600 hover:text-blue-600 transition-colors text-lg font-medium cursor-pointer">
+                        <div class="bg-slate-100 p-2 rounded-full mr-2 group-hover:bg-blue-100">
+                            <i data-lucide="arrow-left" class="w-6 h-6 text-slate-700"></i>
+                        </div>
+                        Retour à la liste
+                    </button>
+                </div>
+
+                <div class="p-6 sm:p-10 flex-1 flex flex-col items-center max-w-2xl mx-auto w-full">
+                    <h2 class="text-3xl font-bold text-slate-800 text-center mb-2">${lesson.title}</h2>
+                    <p class="text-slate-500 text-xl mb-8 text-center">${lesson.desc}</p>
+
+                    <!-- Vidéo Placeholder -->
+                    <div class="w-full aspect-video bg-slate-900 rounded-lg shadow-lg flex items-center justify-center mb-10 relative overflow-hidden group cursor-pointer hover:shadow-2xl transition-all">
+                        <img src="https://img.youtube.com/vi/${lesson.videoId}/maxresdefault.jpg" class="absolute inset-0 w-full h-full object-cover opacity-60">
+                        <div class="z-10 bg-white/10 backdrop-blur-sm p-4 rounded-full border-2 border-white/50 group-hover:scale-110 transition-transform">
+                             <i data-lucide="play" class="w-12 h-12 text-white fill-white"></i>
+                        </div>
+                    </div>
+
+                    <!-- Zone Action Élève -->
+                    <div class="w-full bg-blue-50 border border-blue-100 rounded-xl p-6 sm:p-8 text-center">
+                        <h3 class="text-2xl font-semibold text-blue-900 mb-4">J'ai terminé !</h3>
+                        <p class="text-lg text-slate-600 mb-6">Pour débloquer la suite, filme ton exercice et envoie-le à François.</p>
+                        
+                        <a href="https://wa.me/33600000000?text=Bonjour François, voici ma vidéo pour le ${lesson.title}" 
+                           target="_blank"
+                           class="inline-flex items-center justify-center bg-[#25D366] hover:bg-[#20bd5a] text-white text-xl font-bold py-4 px-8 rounded-full shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 cursor-pointer">
+                            <i data-lucide="message-circle" class="w-6 h-6 mr-3"></i>
+                            Envoyer ma vidéo
+                        </a>
+                    </div>
+                </div>
+            `;
+            container.appendChild(detail);
+        }
+
+        // --- LOGIQUE MÉTIER ---
+
+        function getStatus(index) {
+            if (index < state.completedLessons) return 'completed';
+            if (index === state.completedLessons) return 'current';
+            return 'locked';
+        }
+
+        function openLesson(id) {
+            state.selectedLessonId = id;
+            state.view = 'detail';
+            render();
+            window.scrollTo(0, 0);
+        }
+
+        function closeLesson() {
+            state.selectedLessonId = null;
+            state.view = 'list';
+            render();
+        }
+
+        function validateLesson(index) {
+            if (index === state.completedLessons) {
+                state.completedLessons++;
+                render();
+            }
+        }
+
+        function unvalidateLesson() {
+            if (state.completedLessons > 0) {
+                state.completedLessons--;
+                render();
+            }
+        }
+        
+        // Exposer les fonctions pour les onclicks HTML
+        window.openLesson = openLesson;
+        window.closeLesson = closeLesson;
+        window.validateLesson = validateLesson;
+        window.unvalidateLesson = unvalidateLesson;
+
+        // --- GESTION PROFESSEUR ---
+        
+        document.getElementById('teacher-dot').addEventListener('click', () => {
+            const code = prompt("Code PIN Professeur :");
+            if (code === "8375") {
+                state.isTeacherMode = !state.isTeacherMode;
+                render();
+                // Petit feedback visuel
+                const dot = document.getElementById('teacher-dot');
+                if(state.isTeacherMode) {
+                    dot.style.backgroundColor = "#22c55e"; // Vert quand actif
+                    dot.style.opacity = "1";
+                } else {
+                    dot.style.backgroundColor = "#60a5fa"; // Bleu quand inactif
+                    dot.style.opacity = "0.3";
+                }
+            } else if (code !== null) {
+                alert("Code incorrect.");
+            }
+        });
+
+        // --- INIT ---
+        render();
+
+    </script>
 </body>
 </html>
