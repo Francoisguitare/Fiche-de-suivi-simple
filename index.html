@@ -30,7 +30,7 @@
 </head>
 <body class="bg-slate-100 min-h-screen flex justify-center py-4 sm:py-8 text-slate-800">
 
-    <!-- MODAL PIN -->
+    <!-- MODAL PIN (Professeur) -->
     <div id="pin-modal" class="fixed inset-0 bg-black/80 hidden z-[100] flex items-center justify-center fade-in">
         <div class="bg-white p-8 rounded-xl shadow-2xl text-center max-w-sm w-full relative">
             <button onclick="window.closePinModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
@@ -41,6 +41,22 @@
             
             <input type="password" id="pin-input" maxlength="4" placeholder="••••" 
                    class="w-full text-center text-4xl font-mono tracking-[1em] border-2 border-slate-200 rounded-lg py-4 pin-input transition-colors bg-slate-50 text-slate-800 placeholder:text-slate-300">
+        </div>
+    </div>
+
+    <!-- MODAL CONFIRMATION WHATSAPP -->
+    <div id="confirm-modal" class="fixed inset-0 bg-black/80 hidden z-[100] flex items-center justify-center fade-in">
+        <div class="bg-white p-8 rounded-xl shadow-2xl text-center max-w-sm w-full relative">
+            <div class="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4 text-green-600">
+                <i data-lucide="message-circle" class="w-8 h-8"></i>
+            </div>
+            <h3 class="text-xl font-bold text-slate-800 mb-2">Confirmation</h3>
+            <p class="text-slate-500 mb-8">As-tu bien envoyé ta vidéo sur WhatsApp ?</p>
+            
+            <div class="flex gap-4 justify-center">
+                <button onclick="window.closeConfirmModal()" class="px-6 py-2 rounded-lg border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50">Non</button>
+                <button onclick="window.confirmVideoSent()" class="px-6 py-2 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700 shadow-lg shadow-green-200">Oui, c'est fait</button>
+            </div>
         </div>
     </div>
 
@@ -88,23 +104,20 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         
-        // ID unique du document pour ce cours (Simule une base unique pour l'instant)
+        // ID unique du document pour ce cours
         const COURSE_DOC_ID = "gia_course_data_v1";
 
         // --- GESTION DES DONNÉES ---
         
         const defaultLessons = [
             { id: 1, title: "Module 1 : Tenue et Position", desc: "Apprendre à tenir la guitare sans tension.", videoId: "dQw4w9WgXcQ" },
-            { id: 2, title: "Module 2 : Les 3 premiers accords", desc: "Maitriser le Mi mineur, le La majeur et le Ré majeur.", videoId: "dQw4w9WgXcQ" },
-            { id: 3, title: "Module 3 : Rythmique Feu de Camp", desc: "Le mouvement de balancier et le rythme bas-bas-haut.", videoId: "dQw4w9WgXcQ" },
-            { id: 4, title: "Module 4 : L'Arpège simple", desc: "Délier les doigts de la main droite.", videoId: "dQw4w9WgXcQ" },
-            { id: 5, title: "Module 5 : Improvisation Pentatonique", desc: "Premiers pas dans l'improvisation.", videoId: "dQw4w9WgXcQ" }
+            { id: 2, title: "Module 2 : Les 3 premiers accords", desc: "Maitriser le Mi mineur, le La majeur et le Ré majeur.", videoId: "dQw4w9WgXcQ" }
         ];
 
-        // Variables globales accessibles
         window.lessons = [];
         window.state = {
             completedLessons: 0, 
+            videoSubmitted: false, // Nouvel état pour savoir si la vidéo est envoyée
             view: 'list',
             selectedLessonId: null,
             editingLessonId: null,
@@ -136,22 +149,19 @@
 
         // --- SYNC FIREBASE ---
 
-        // Écoute en temps réel
         setStatus('connecting');
         const unsub = onSnapshot(doc(db, "courses", COURSE_DOC_ID), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 window.lessons = data.lessons || defaultLessons;
-                // On met à jour la progression seulement si on n'est pas en train de faire une action locale qui pourrait désynchroniser
-                // Mais pour simplifier, on accepte la source de vérité du serveur
                 window.state.completedLessons = typeof data.completedLessons === 'number' ? data.completedLessons : 0;
+                window.state.videoSubmitted = typeof data.videoSubmitted === 'boolean' ? data.videoSubmitted : false;
                 
                 setStatus('connected');
                 render();
             } else {
-                // Le document n'existe pas encore, on l'initialise
                 console.log("Initialisation de la base de données...");
-                saveDataToFirebase(defaultLessons, 0);
+                saveDataToFirebase(defaultLessons, 0, false);
             }
         }, (error) => {
             console.error("Erreur Firebase:", error);
@@ -159,22 +169,22 @@
         });
 
         // Fonction de sauvegarde globale
-        window.saveDataToFirebase = async function(newLessons, newCompletedCount) {
+        window.saveDataToFirebase = async function(newLessons, newCompletedCount, newVideoSubmitted) {
             setStatus('saving');
             try {
                 await setDoc(doc(db, "courses", COURSE_DOC_ID), {
                     lessons: newLessons !== undefined ? newLessons : window.lessons,
                     completedLessons: newCompletedCount !== undefined ? newCompletedCount : window.state.completedLessons,
+                    videoSubmitted: newVideoSubmitted !== undefined ? newVideoSubmitted : window.state.videoSubmitted,
                     lastUpdated: new Date()
                 }, { merge: true });
-                // Le status repassera à 'connected' via le listener onSnapshot qui recevra la notif de succès
             } catch (e) {
                 console.error("Erreur sauvegarde:", e);
                 setStatus('error');
             }
         };
 
-        // --- LOGIQUE METIER & RENDU (Adapté pour Module) ---
+        // --- LOGIQUE METIER & RENDU ---
 
         function render() {
             const container = document.getElementById('content');
@@ -194,6 +204,7 @@
         function renderListView(container) {
             const header = document.createElement('div');
             header.className = "p-8 sm:p-10 border-b-2 border-slate-100";
+            // La progression est basée sur le nombre total, même si on les cache
             const progressPct = window.lessons.length > 0 ? (window.state.completedLessons / window.lessons.length) * 100 : 0;
             
             let teacherHeader = '';
@@ -230,10 +241,19 @@
             } else {
                 window.lessons.forEach((lesson, index) => {
                     const status = getStatus(index);
+                    
+                    // MASQUER LES LEÇONS FUTURES SI PAS PROF
+                    // On affiche seulement si c'est fini ou si c'est la leçon courante.
+                    // index <= window.state.completedLessons (Car completedLessons est l'index de la courante)
+                    if (!window.state.isTeacherMode && index > window.state.completedLessons) {
+                        return; // On saute l'itération pour ne pas l'afficher
+                    }
+
                     const item = document.createElement('div');
                     
                     let bgClass = "";
                     if (status === 'locked') {
+                        // N'arrive pratiquement plus pour l'élève car caché, mais utile pour le prof
                         bgClass = 'bg-slate-50 opacity-60 cursor-not-allowed grayscale border-b border-slate-100';
                     } else {
                         bgClass = 'bg-white cursor-pointer border-b border-slate-100 transition-all duration-200 transform hover:-translate-y-1 hover:shadow-lg hover:z-10 relative';
@@ -246,11 +266,24 @@
 
                     let iconHtml = '';
                     if (status === 'completed') iconHtml = `<div class="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-green-600"><i data-lucide="check-circle" class="w-7 h-7"></i></div>`;
-                    else if (status === 'current') iconHtml = `<div class="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center text-white shadow-lg animate-pulse"><i data-lucide="play" class="w-6 h-6 ml-1 fill-white"></i></div>`;
+                    else if (status === 'current') {
+                        if (window.state.videoSubmitted) {
+                            // Si vidéo envoyée, icône sablier ou horloge
+                            iconHtml = `<div class="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center text-orange-500 shadow-md"><i data-lucide="hourglass" class="w-6 h-6"></i></div>`;
+                        } else {
+                            iconHtml = `<div class="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center text-white shadow-lg animate-pulse"><i data-lucide="play" class="w-6 h-6 ml-1 fill-white"></i></div>`;
+                        }
+                    }
                     else iconHtml = `<div class="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-slate-400"><i data-lucide="lock" class="w-6 h-6"></i></div>`;
 
                     let statusText = '';
-                    if (status === 'current') statusText = `<span class="ml-4 text-blue-600 font-bold bg-blue-100 px-2 py-0.5 rounded text-sm uppercase tracking-wide">C'est ici !</span>`;
+                    if (status === 'current') {
+                        if (window.state.videoSubmitted) {
+                            statusText = `<span class="ml-4 text-orange-500 font-bold bg-orange-50 px-2 py-0.5 rounded text-sm uppercase tracking-wide">Attente validation</span>`;
+                        } else {
+                            statusText = `<span class="ml-4 text-blue-600 font-bold bg-blue-100 px-2 py-0.5 rounded text-sm uppercase tracking-wide">C'est ici !</span>`;
+                        }
+                    }
                     if (status === 'completed') statusText = `<span class="ml-4 text-green-600 font-bold text-sm uppercase tracking-wide">Validé</span>`;
 
                     let teacherControls = '';
@@ -308,6 +341,50 @@
             const lesson = window.lessons.find(l => l.id === window.state.selectedLessonId);
             if (!lesson) return;
 
+            // Déterminer l'état du bouton vidéo
+            // Si le statut est "completed", on ne montre plus rien ou juste un bravo
+            // Si c'est "current" ET videoSubmitted == true, on montre le message d'attente
+            // Sinon on montre le bouton
+            const lessonIndex = window.lessons.findIndex(l => l.id === lesson.id);
+            const isCompleted = lessonIndex < window.state.completedLessons;
+            const isCurrent = lessonIndex === window.state.completedLessons;
+
+            let actionArea = '';
+
+            if (isCompleted) {
+                actionArea = `
+                    <div class="w-full bg-green-50 border border-green-100 rounded-xl p-6 sm:p-8 text-center">
+                        <h3 class="text-2xl font-bold text-green-700 mb-2">Module Validé !</h3>
+                        <p class="text-lg text-green-600">Bravo, tu peux passer à la suite.</p>
+                    </div>
+                `;
+            } else if (isCurrent) {
+                if (window.state.videoSubmitted) {
+                    actionArea = `
+                        <div class="w-full bg-orange-50 border border-orange-100 rounded-xl p-6 sm:p-8 text-center flex flex-col items-center">
+                            <div class="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mb-4 animate-pulse">
+                                <i data-lucide="clock" class="w-8 h-8 text-orange-500"></i>
+                            </div>
+                            <h3 class="text-2xl font-semibold text-orange-800 mb-2">Vidéo envoyée !</h3>
+                            <p class="text-lg text-orange-600">Veuillez attendre la validation du professeur pour débloquer la suite.</p>
+                        </div>
+                    `;
+                } else {
+                    actionArea = `
+                        <div class="w-full bg-blue-50 border border-blue-100 rounded-xl p-6 sm:p-8 text-center">
+                            <h3 class="text-2xl font-semibold text-blue-900 mb-4">J'ai terminé !</h3>
+                            <p class="text-lg text-slate-600 mb-6">Pour débloquer la suite, filme ton exercice et envoie-le à François.</p>
+                            
+                            <button onclick="window.handleVideoClick('${lesson.title}')" 
+                               class="inline-flex items-center justify-center bg-[#25D366] hover:bg-[#20bd5a] text-white text-xl font-bold py-4 px-8 rounded-full shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 cursor-pointer w-full sm:w-auto">
+                                <i data-lucide="message-circle" class="w-6 h-6 mr-3"></i>
+                                Envoyer ma vidéo
+                            </button>
+                        </div>
+                    `;
+                }
+            }
+
             const detail = document.createElement('div');
             detail.className = "flex-1 flex flex-col fade-in bg-white";
             
@@ -338,16 +415,7 @@
                         </div>
                     </div>
 
-                    <div class="w-full bg-blue-50 border border-blue-100 rounded-xl p-6 sm:p-8 text-center">
-                        <h3 class="text-2xl font-semibold text-blue-900 mb-4">J'ai terminé !</h3>
-                        <p class="text-lg text-slate-600 mb-6">Pour débloquer la suite, filme ton exercice et envoie-le à François.</p>
-                        <a href="https://wa.me/33600000000?text=Bonjour François, voici ma vidéo pour le ${lesson.title}" 
-                           target="_blank"
-                           class="inline-flex items-center justify-center bg-[#25D366] hover:bg-[#20bd5a] text-white text-xl font-bold py-4 px-8 rounded-full shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 cursor-pointer">
-                            <i data-lucide="message-circle" class="w-6 h-6 mr-3"></i>
-                            Envoyer ma vidéo
-                        </a>
-                    </div>
+                    ${actionArea}
                 </div>
             `;
             container.appendChild(detail);
@@ -417,18 +485,45 @@
             render();
         };
 
+        // --- LOGIQUE VALIDATION VIDEO ---
+        
+        const confirmModal = document.getElementById('confirm-modal');
+        
+        window.handleVideoClick = function(lessonTitle) {
+            // 1. Ouvrir WhatsApp
+            const url = `https://wa.me/33600000000?text=Bonjour François, voici ma vidéo pour le ${lessonTitle}`;
+            window.open(url, '_blank');
+            
+            // 2. Afficher la modale de confirmation
+            confirmModal.classList.remove('hidden');
+        };
+
+        window.closeConfirmModal = function() {
+            confirmModal.classList.add('hidden');
+        };
+
+        window.confirmVideoSent = function() {
+            // L'élève confirme qu'il a envoyé la vidéo
+            confirmModal.classList.add('hidden');
+            window.saveDataToFirebase(undefined, undefined, true); // videoSubmitted = true
+        };
+
+
+        // --- LOGIQUE PROF ---
+
         window.validateLesson = function(index) {
             if (index === window.state.completedLessons) {
-                // Optimistic UI update handled by re-render, data save handles server
                 const newCount = window.state.completedLessons + 1;
-                window.saveDataToFirebase(undefined, newCount);
+                // Quand on valide, on reset aussi le flag videoSubmitted à false pour la prochaine leçon
+                window.saveDataToFirebase(undefined, newCount, false);
             }
         };
 
         window.unvalidateLesson = function() {
             if (window.state.completedLessons > 0) {
                 const newCount = window.state.completedLessons - 1;
-                window.saveDataToFirebase(undefined, newCount);
+                // On peut laisser videoSubmitted à false, ou true, mais false est plus sûr pour éviter état bloqué
+                window.saveDataToFirebase(undefined, newCount, false);
             }
         };
 
@@ -470,7 +565,7 @@
                 if (index !== -1) newLessons[index] = { ...newLessons[index], ...data };
             }
             
-            window.saveDataToFirebase(newLessons, undefined);
+            window.saveDataToFirebase(newLessons, undefined, undefined);
             window.closeEdit();
         };
 
@@ -480,7 +575,7 @@
                 let newCompleted = window.state.completedLessons;
                 if(newCompleted > newLessons.length) newCompleted = newLessons.length;
                 
-                window.saveDataToFirebase(newLessons, newCompleted);
+                window.saveDataToFirebase(newLessons, newCompleted, undefined);
             }
         };
         
