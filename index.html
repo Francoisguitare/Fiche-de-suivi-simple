@@ -242,12 +242,8 @@
                 window.lessons.forEach((lesson, index) => {
                     const status = getStatus(index);
                     
-                    // MASQUER LES LEÇONS FUTURES SI PAS PROF
-                    // On affiche seulement si c'est fini ou si c'est la leçon courante.
-                    // index <= window.state.completedLessons (Car completedLessons est l'index de la courante)
-                    if (!window.state.isTeacherMode && index > window.state.completedLessons) {
-                        return; // On saute l'itération pour ne pas l'afficher
-                    }
+                    // Titre masqué si verrouillé et pas prof
+                    const displayTitle = (!window.state.isTeacherMode && status === 'locked') ? "???" : lesson.title;
 
                     const item = document.createElement('div');
                     
@@ -310,7 +306,7 @@
                         ${teacherControls}
                         <div class="mr-6 sm:mr-8 flex-shrink-0">${iconHtml}</div>
                         <div class="flex-1">
-                            <h3 class="text-xl sm:text-2xl font-bold mb-1 ${status === 'locked' ? 'text-slate-400' : 'text-slate-800'} pr-16">${lesson.title}</h3>
+                            <h3 class="text-xl sm:text-2xl font-bold mb-1 ${status === 'locked' ? 'text-slate-400' : 'text-slate-800'} pr-16">${displayTitle}</h3>
                             <div class="flex items-center text-slate-500">
                                 ${statusText}
                             </div>
